@@ -34,7 +34,7 @@ loss_fn = None
 def load_optimizer():
     global optimizer
     if optimizer is None:
-        optimizer = keras.optimizers.Adam(learning_rate=0.05)
+        optimizer = keras.optimizers.SGD(learning_rate=0.01)
     return optimizer
 
 
