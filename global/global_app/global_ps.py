@@ -11,7 +11,7 @@ from flwr.common.logger import log
 from flwr.server.server import Server
 from flwr.server.history import History
 
-from .task import load_model
+from .task import load_model, load_optimizer, load_loss_fn
 
 
 class GlobalParameterServer(Server):
@@ -19,8 +19,9 @@ class GlobalParameterServer(Server):
         super().__init__(*args, **kwargs)
 
         self.model = load_model()
-        self.optimizer = keras.optimizers.SGD(learning_rate=0.01)
-        self.loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.optimizer = load_optimizer()
+        self.loss_fn = load_loss_fn()
+
         self.model.compile(
             optimizer=self.optimizer,
             loss=self.loss_fn

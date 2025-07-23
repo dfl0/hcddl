@@ -26,7 +26,7 @@ from flwr.server.client_manager import SimpleClientManager
 from flwr.server.strategy import FedAvg
 from flwr.server.client_proxy import ClientProxy
 
-from .task import load_compiled_model, load_data
+from .task import load_compiled_model, load_data, load_optimizer, load_loss_fn
 from .global_ps import GlobalParameterServer
 
 
@@ -139,8 +139,8 @@ class GlobalFedAvg(FedAvg):
 
         self.target_accuracy = target_accuracy
 
-        self.optimizer = keras.optimizers.SGD(learning_rate=0.01)
-        self.loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.optimizer = load_optimizer()
+        self.loss_fn = load_loss_fn()
 
     def __repr__(self) -> str:
         """Compute a string representation of the strategy."""

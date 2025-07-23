@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-import keras
 from logging import INFO
 
 from flwr.common import Context
@@ -8,7 +7,7 @@ from flwr.common.logger import log
 
 from flwr.client import NumPyClient, ClientApp
 
-from .task import load_data, load_compiled_model
+from .task import load_data, load_optimizer, load_loss_fn, load_compiled_model
 
 
 class WorkerClient(NumPyClient):
@@ -23,14 +22,8 @@ class WorkerClient(NumPyClient):
         self.batch_size = batch_size
         self.verbose = verbose
 
-        self.optimizer = keras.optimizers.SGD(learning_rate=0.01)
-        self.loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
-        self.model.compile(
-            optimizer=self.optimizer,
-            loss=self.loss_fn,
-            metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
-        )
+        self.optimizer = load_optimizer()
+        self.loss_fn = load_loss_fn()
 
     def fit(self, parameters, config):
         self.model.set_weights(parameters)

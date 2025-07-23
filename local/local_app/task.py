@@ -27,11 +27,29 @@ def load_model():
     return model
 
 
+optimizer = None
+loss_fn = None
+
+
+def load_optimizer():
+    global optimizer
+    if optimizer is None:
+        optimizer = keras.optimizers.SGD(learning_rate=0.01)
+    return optimizer
+
+
+def load_loss_fn():
+    global loss_fn
+    if loss_fn is None:
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    return loss_fn
+
+
 def load_compiled_model():
     model = load_model()
     model.compile(
-        optimizer=keras.optimizers.SGD(learning_rate=0.01),
-        loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        optimizer=load_optimizer(),
+        loss=load_loss_fn(),
         metrics=[keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
     )
     return model
