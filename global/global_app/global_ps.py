@@ -9,7 +9,7 @@ from flwr.common.logger import log
 from flwr.server.server import Server
 from flwr.server.history import History
 
-from .task import load_model, load_optimizer, load_loss_fn
+from .task import load_model
 
 
 class GlobalParameterServer(Server):
@@ -17,12 +17,9 @@ class GlobalParameterServer(Server):
         super().__init__(*args, **kwargs)
 
         self.model = load_model()
-        self.optimizer = load_optimizer()
-        self.loss_fn = load_loss_fn()
-
         self.model.compile(
-            optimizer=self.optimizer,
-            loss=self.loss_fn
+            optimizer=self.strategy.optimizer,
+            loss=self.strategy.loss_fn
         )
 
     def fit(self, num_rounds: int, timeout: Optional[float]) -> tuple[History, float]:
