@@ -1,11 +1,9 @@
 import timeit
-import numpy as np
 import tensorflow as tf
-import keras
 from logging import INFO, WARN
 from typing import Optional
 
-from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters
+from flwr.common import Parameters, parameters_to_ndarrays, ndarrays_to_parameters
 from flwr.common.logger import log
 
 from flwr.server.server import Server
@@ -28,7 +26,6 @@ class GlobalParameterServer(Server):
         )
 
     def fit(self, num_rounds: int, timeout: Optional[float]) -> tuple[History, float]:
-        """Run federated averaging for a number of rounds."""
         history = History()
 
         # Initialize parameters
@@ -61,21 +58,12 @@ class GlobalParameterServer(Server):
 
             if res_fit is not None:
                 aggregated_gradients, fit_metrics, _ = res_fit
-
                 if aggregated_gradients:
-                    aggregated_gradients_ndarrays = parameters_to_ndarrays(aggregated_gradients)
+                    self._apply_gradients(aggregated_gradients)
 
-                    tf_gradients = [
-                        tf.convert_to_tensor(g, dtype=tf.float32) if g is not None else None
-                        for g in aggregated_gradients_ndarrays
-                    ]
-
-                    self.strategy.optimizer.apply_gradients(zip(tf_gradients, self.model.trainable_weights))
-                    self.parameters = ndarrays_to_parameters(self.model.get_weights())
-
-                    history.add_metrics_distributed_fit(
-                        server_round=current_round, metrics=fit_metrics
-                    )
+                history.add_metrics_distributed_fit(
+                    server_round=current_round, metrics=fit_metrics
+                )
 
             # Evaluate model using strategy implementation
             res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
@@ -99,6 +87,12 @@ class GlobalParameterServer(Server):
                         log(INFO, "Global accuracy: %.4f (Target: %.4f)", metrics_cen["accuracy"], self.strategy.target_accuracy)
                         if metrics_cen["accuracy"] >= self.strategy.target_accuracy:
                             log(INFO, "Target accuracy reached, stopping training")
+
+                            log(WARN, "Sending out last round of training")
+                            self.fit_round(
+                                server_round=-1,
+                                timeout=timeout,
+                            )
                             break
                     else:
                         log(WARN, "Evaluation function did not return an 'accuracy' metric")
@@ -117,13 +111,18 @@ class GlobalParameterServer(Server):
             #             server_round=current_round, metrics=evaluate_metrics_fed
             #         )
 
-        log(WARN, "Sending out last round of training")
-        self.fit_round(
-            server_round=-1,
-            timeout=timeout,
-        )
-
         # Bookkeeping
         end_time = timeit.default_timer()
         elapsed = end_time - start_time
         return history, elapsed
+
+    def _apply_gradients(self, aggregated_gradients: Parameters):
+        aggregated_gradients_ndarrays = parameters_to_ndarrays(aggregated_gradients)
+
+        tf_gradients = [
+            tf.convert_to_tensor(g, dtype=tf.float32) if g is not None else None
+            for g in aggregated_gradients_ndarrays
+        ]
+
+        self.strategy.optimizer.apply_gradients(zip(tf_gradients, self.model.trainable_weights))
+        self.parameters = ndarrays_to_parameters(self.model.get_weights())
