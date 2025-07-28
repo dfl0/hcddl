@@ -1,5 +1,4 @@
 import numpy as np
-import keras
 
 from functools import partial, reduce
 
@@ -28,6 +27,7 @@ from flwr.server.client_proxy import ClientProxy
 
 from .task import load_compiled_model, load_data, load_optimizer, load_loss_fn
 from .global_ps import GlobalParameterServer
+from .async_global_ps import AsyncGlobalParameterServer
 
 
 def get_on_fit_config_fn(num_rounds):
@@ -144,7 +144,7 @@ class GlobalFedAvg(FedAvg):
 
     def __repr__(self) -> str:
         """Compute a string representation of the strategy."""
-        rep = f"CentralFedAvg(accept_failures={self.accept_failures})"
+        rep = f"GlobalFedAvg(accept_failures={self.accept_failures})"
         return rep
 
     def aggregate_fit(
@@ -153,10 +153,6 @@ class GlobalFedAvg(FedAvg):
         results: list[tuple[ClientProxy, FitRes]],
         failures: list[Union[tuple[ClientProxy, FitRes], BaseException]],
     ) -> tuple[Optional[Parameters], dict[str, Scalar]]:
-        log(INFO, f"Aggregating gradients from {len(results)} clients.")
-
-        # parameters_aggregated, metrics_aggregated = super().aggregate_fit(server_round, results, failures)
-
         """Aggregate fit results using weighted average."""
         if not results:
             return None, {}
@@ -184,8 +180,6 @@ class GlobalFedAvg(FedAvg):
             metrics_aggregated = self.fit_metrics_aggregation_fn(fit_metrics)
         elif server_round == 1:  # Only log this warning once
             log(WARN, "No fit_metrics_aggregation_fn provided")
-
-        log(INFO, "Done")
 
         return parameters_aggregated, metrics_aggregated
 
@@ -243,7 +237,7 @@ def server_fn(context: Context):
         target_accuracy=target_accuracy
     )
     config = ServerConfig(num_rounds=num_rounds)
-    server = GlobalParameterServer(client_manager=client_manager, strategy=strategy)
+    server = AsyncGlobalParameterServer(client_manager=client_manager, strategy=strategy)
 
     return ServerAppComponents(server=server, config=config)
 

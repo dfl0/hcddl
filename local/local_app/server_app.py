@@ -1,5 +1,5 @@
 from logging import INFO
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union, Callable
 
 import pickle
 
@@ -9,7 +9,10 @@ from flwr.common import (
     FitRes,
     Parameters,
     Scalar,
+    NDArrays,
+    MetricsAggregationFn,
     parameters_to_ndarrays,
+    ndarrays_to_parameters,
 )
 from flwr.common.logger import log
 
@@ -18,13 +21,59 @@ from flwr.server.client_manager import SimpleClientManager
 from flwr.server.strategy import FedAvg
 from flwr.server.client_proxy import ClientProxy
 
-from local_app.local_ps import LocalParameterServer  # , LocalParameterServerApp
+from .task import load_optimizer, load_loss_fn
+from .local_ps import LocalParameterServer
+from .async_local_ps import AsyncLocalParameterServer
 
 
 class LocalFedAvg(FedAvg):
+    def __init__(
+        self,
+        *,
+        fraction_fit: float = 1.0,
+        fraction_evaluate: float = 1.0,
+        min_fit_clients: int = 2,
+        min_evaluate_clients: int = 2,
+        min_available_clients: int = 2,
+        evaluate_fn: Optional[
+            Callable[
+                [int, NDArrays, dict[str, Scalar]],
+                Optional[tuple[float, dict[str, Scalar]]],
+            ]
+        ] = None,
+        on_fit_config_fn: Optional[Callable[[int], dict[str, Scalar]]] = None,
+        on_evaluate_config_fn: Optional[Callable[[int], dict[str, Scalar]]] = None,
+        accept_failures: bool = True,
+        initial_parameters: Optional[Parameters] = None,
+        fit_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
+        evaluate_metrics_aggregation_fn: Optional[MetricsAggregationFn] = None,
+        inplace: bool = True,
+        target_accuracy: float = None,
+    ) -> None:
+        super().__init__(
+            fraction_fit=fraction_fit,
+            fraction_evaluate=fraction_evaluate,
+            min_fit_clients=min_fit_clients,
+            min_evaluate_clients=min_evaluate_clients,
+            min_available_clients=min_available_clients,
+            evaluate_fn=evaluate_fn,
+            on_fit_config_fn=on_fit_config_fn,
+            on_evaluate_config_fn=on_evaluate_config_fn,
+            accept_failures=accept_failures,
+            initial_parameters=initial_parameters,
+            fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
+            evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
+            inplace=inplace,
+        )
+
+        self.target_accuracy = target_accuracy
+
+        self.optimizer = load_optimizer()
+        self.loss_fn = load_loss_fn()
+
     def __repr__(self) -> str:
         """Compute a string representation of the strategy."""
-        rep = f"EdgeFedAvg(accept_failures={self.accept_failures})"
+        rep = f"LocalFedAvg(accept_failures={self.accept_failures})"
         return rep
 
     def aggregate_fit(
@@ -33,16 +82,13 @@ class LocalFedAvg(FedAvg):
         results: list[tuple[ClientProxy, FitRes]],
         failures: list[Union[tuple[ClientProxy, FitRes], BaseException]],
     ) -> tuple[Optional[Parameters], dict[str, Scalar]]:
-        num_successful_clients = len(results)
-        log(INFO, f"Aggregating gradients from {num_successful_clients} clients.")
-
         gradients_aggregated, metrics_aggregated = super().aggregate_fit(server_round, results, failures)
 
         aggr_grads_filepath = "grads.pkl"
         with open(aggr_grads_filepath, "wb") as file:
             updated_parameters_ndarrays = parameters_to_ndarrays(gradients_aggregated)
             pickle.dump(updated_parameters_ndarrays, file)
-        log(INFO, f"Aggregated complete, gradients saved: {aggr_grads_filepath}")
+        log(INFO, f"Aggregation complete, gradients saved: {aggr_grads_filepath}")
 
         return gradients_aggregated, metrics_aggregated
 
@@ -85,11 +131,11 @@ def server_fn(context: Context) -> ServerAppComponents:
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_available_clients=2,
-        # fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
-        # evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
+        fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
+        evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
     )
     config = ServerConfig(num_rounds=1)
-    server = LocalParameterServer(client_manager=client_manager, strategy=strategy)
+    server = AsyncLocalParameterServer(client_manager=client_manager, strategy=strategy)
 
     return ServerAppComponents(server=server, config=config)
 
