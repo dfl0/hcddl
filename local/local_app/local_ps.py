@@ -1,6 +1,7 @@
 import os
 import timeit
 import pickle
+
 from logging import INFO
 from typing import Optional
 
@@ -20,16 +21,16 @@ class LocalParameterServer(Server):
     def _get_initial_parameters(
         self, server_round: int, timeout: Optional[float]
     ) -> Parameters:
-        gbl_weights_filepath = "weights.pkl"
-        log(INFO, f"Loading weights from file: {gbl_weights_filepath}... ")
-        with open(gbl_weights_filepath, "rb") as file:
+        global_params_filepath = "params.pkl"
+        log(INFO, f"Loading weights from file: {global_params_filepath}... ")
+        with open(global_params_filepath, "rb") as file:
             parameters_ndarrays = pickle.load(file)
         log(INFO, "Done")
         parameters = ndarrays_to_parameters(parameters_ndarrays)
 
-        log(INFO, "Removing weights file... ")
-        os.remove(gbl_weights_filepath)
-        log(INFO, "Done")
+        # log(INFO, "Removing params file... ")
+        # os.remove(gbl_params_filepath)
+        # log(INFO, "Done")
 
         return parameters
 
@@ -45,19 +46,19 @@ class LocalParameterServer(Server):
             log(INFO, "")
             log(INFO, "*** Waiting for global parameters ***")
             log(INFO, "")
-            glb_aggr_pipe = "glb_aggr_sig"
-            if not os.path.exists(glb_aggr_pipe):
-                os.mkfifo(glb_aggr_pipe)
+            glb_sig_pipe = "glb_sig"
+            if not os.path.exists(glb_sig_pipe):
+                os.mkfifo(glb_sig_pipe)
 
-            with open(glb_aggr_pipe, "r") as pipe:
+            with open(glb_sig_pipe, "r") as pipe:
                 signal = pipe.readline().strip()  # wait for GLB_AGGR_W from Edge Aggregator client
             log(INFO, f"Signal received: {signal}")
 
+            os.remove(glb_sig_pipe)
+
             if signal == "STOP":
-                os.remove(glb_aggr_pipe)
                 break
             elif signal == "LAST":
-                os.remove(glb_aggr_pipe)
                 self.last_round = True
 
             current_round += 1
@@ -89,31 +90,15 @@ class LocalParameterServer(Server):
             )
 
             log(INFO, "Sending signal...")
-            loc_aggr_pipe = "loc_aggr_sig"
-            with open(loc_aggr_pipe, "w") as pipe:
+            loc_sig_pipe = "loc_sig"
+            with open(loc_sig_pipe, "w") as pipe:
                 pipe.write("LOC_GRAD_W")  # -> Edge Aggregator client
             log(INFO, "Done")
 
             if res_fit is not None:
-                parameters_prime, fit_metrics, _ = res_fit  # fit_metrics_aggregated
-                if parameters_prime:
-                    self.parameters = parameters_prime
-                history.add_metrics_distributed_fit(
-                    server_round=current_round, metrics=fit_metrics
-                )
                 aggregated_gradients, fit_metrics, _ = res_fit
 
                 if aggregated_gradients:
-                    # aggregated_gradients_ndarrays = parameters_to_ndarrays(aggregated_gradients)
-
-                    # tf_gradients = [
-                    #     tf.convert_to_tensor(g, dtype=tf.float32) if g is not None else None
-                    #     for g in aggregated_gradients_ndarrays
-                    # ]
-
-                    # self.strategy.optimizer.apply_gradients(zip(tf_gradients, self.model.trainable_weights))
-                    # self.parameters = ndarrays_to_parameters(self.model.get_weights())
-
                     history.add_metrics_distributed_fit(
                         server_round=current_round, metrics=fit_metrics
                     )
