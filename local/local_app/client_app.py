@@ -41,11 +41,6 @@ class WorkerClient(NumPyClient):
 
         log(INFO, "Beginning client fit step on random batch")
 
-        # delay = int(random.random() * 20)
-        # log(INFO, f"Sleeping for {delay}s...")
-        # time.sleep(delay)
-        # log(INFO, "Done")
-
         # log(INFO, f"Batch labels: {y_train_batch}")
 
         with tf.GradientTape() as tape:

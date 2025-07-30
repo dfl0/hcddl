@@ -22,17 +22,16 @@ class LocalParameterServerClient(NumPyClient):
         glb_sig_pipe = "glb_sig"
 
         if config["should_stop"]:
-            log(INFO, "Sending signal...")
+            log(INFO, "Sending signal... ")
             with open(glb_sig_pipe, "w") as pipe:
-                pipe.write("STOP")  # -> Edge Aggregator server
-                log(INFO, "Done")
-                return parameters, 1, {}
+                pipe.write("STOP\n")  # -> Local PS
+            log(INFO, "Done")
+            return parameters, 1, {}
         elif config["last_round"]:
             log(INFO, "Sending signal... ")
             with open(glb_sig_pipe, "w") as pipe:
-                pipe.write("LAST")  # -> Edge Aggregator server
-                log(INFO, "Done")
-                # return parameters, 1, {}
+                pipe.write("LAST\n")  # -> Local PS
+            log(INFO, "Done")
 
         global_params_filepath = "params.pkl"
         with open(global_params_filepath, "wb") as file:
@@ -42,7 +41,7 @@ class LocalParameterServerClient(NumPyClient):
         log(INFO, "Sending signal...")
         glb_sig_pipe = "glb_sig"
         with open(glb_sig_pipe, "w") as pipe:
-            pipe.write("GLB_AGGR_W")  # -> Edge Aggregator server
+            pipe.write("GLB_AGGR_W\n")  # -> Local PS
         log(INFO, "Done")
 
         log(INFO, "Waiting for local training and aggregation to finish...")
@@ -52,7 +51,7 @@ class LocalParameterServerClient(NumPyClient):
             os.mkfifo(loc_sig_pipe)
 
         with open(loc_sig_pipe, "r") as pipe:
-            signal = pipe.readline().strip()  # wait for LOC_GRAD_W from Edge Aggregator server
+            signal = pipe.readline().strip()  # wait for LOC_GRAD_W from Local PS
         log(INFO, f"Signal received: {signal}")
         os.remove(loc_sig_pipe)
 
@@ -84,19 +83,27 @@ class AsyncLocalParameterServerClient(NumPyClient):
     def fit(self, parameters, config):
         glb_sig_pipe = "glb_sig"
 
-        log(INFO, "Sending signal...")
-        with open(glb_sig_pipe, "w") as pipe:
-            if config["should_stop"]:
-                pipe.write("STOP")  # -> Edge Aggregator server
+        if config["should_stop"]:
+            log(INFO, "Sending signal...")
+            with open(glb_sig_pipe, "w") as pipe:
+                pipe.write("STOP")
+                log(INFO, "Done")
                 return parameters, 1, {}
-            elif config["last_round"]:
-                pipe.write("LAST")  # -> Edge Aggregator server
-        log(INFO, "Done")
+        elif config["last_round"]:
+            log(INFO, "Sending signal... ")
+            with open(glb_sig_pipe, "w") as pipe:
+                pipe.write("LAST")
+                log(INFO, "Done")
 
         global_params_filepath = "params.pkl"
         with open(global_params_filepath, "wb") as file:
             pickle.dump(parameters, file)
         log(INFO, f"Global model parameters saved: {global_params_filepath}")
+
+        with open(glb_sig_pipe, "w") as pipe:
+            log(INFO, "Sending signal...")
+            pipe.write("GLB_PARAMS\n")
+            log(INFO, "Done")
 
         while True:
             grad_files = [f for f in os.listdir() if re.match(r"grads_\d+.pkl", f)]
