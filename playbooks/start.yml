@@ -1,0 +1,55 @@
+---
+- name: Send Out Run to Global Parameter Server
+  hosts: global_servers
+  gather_facts: no
+  vars:
+    local_dir: "{{ lookup('env', 'PWD') }}"
+  vars_files:
+    - "{{ local_dir }}/config.yml"
+
+  tasks:
+    - delegate_to: localhost
+      args:
+        chdir: "{{ local_dir }}"
+      command: >
+        venv/bin/flwr run flower_app
+        --federation-config '
+        address="{{ inventory_hostname }}:9093"
+        '
+        --run-config '
+        arch="{{ arch }}"
+        server-type="global"
+        aggr-type="{{ hostvars[inventory_hostname].aggr_type }}"
+        num-server-rounds={{ num_server_rounds }}
+        target-accuracy={{ target_accuracy }}
+        batch-size={{ batch_size }}
+        '
+      register: result
+      failed_when: "'Success' not in result.stdout"
+    - debug:
+        msg: "{{ result }}"
+
+- name: Send Out Run to Local Parameter Servers
+  hosts: local_servers
+  gather_facts: no
+  vars:
+    local_dir: "{{ lookup('env', 'PWD') }}"
+
+  tasks:
+    - delegate_to: localhost
+      args:
+        chdir: "{{ local_dir }}"
+      command: >
+        venv/bin/flwr run flower_app
+        --federation-config '
+        address="{{ inventory_hostname }}:9093"
+        '
+        --run-config '
+        arch="{{ arch }}"
+        server-type="local"
+        aggr-type="{{ hostvars[inventory_hostname].aggr_type }}"
+        '
+      register: result
+      failed_when: "'Success' not in result.stdout"
+    - debug:
+        msg: "{{ result }}"

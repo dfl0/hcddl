@@ -1,0 +1,82 @@
+---
+# - import_playbook: "{{ 'flat_assign_hosts.yml' if arch == 'flat' else 'assign_hosts.yml' }}"
+
+- name: Assign Hosts to Groups
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - "{{ lookup('env', 'PWD') }}/config.yml"
+
+  tasks:
+    - import_tasks: tasks/assign_hosts.yml
+      vars:
+        available_hosts: "{{ groups.pool | list }}"
+      when: arch == "hierarchical"
+    - import_tasks: tasks/flat_assign_hosts.yml
+      vars:
+        available_hosts: "{{ groups.pool | list }}"
+      when: arch == "flat"
+
+- name: Start Global Parameter Server
+  hosts: global_servers
+  gather_facts: no
+
+  tasks:
+    - debug:
+        msg:
+          - "Running on Global Parameter Server {{ inventory_hostname }}"
+    - shell: >
+        cd $HOME/hcddl &&
+        . venv/bin/activate &&
+        nohup ./start_global_ps.sh > run.log 2>&1 &
+      environment:
+        PYTHONUNBUFFERED: 1
+      register: result
+    - debug:
+        msg: "{{ result }}"
+
+- name: Start Local Parameter Servers
+  hosts: local_servers
+  gather_facts: no
+
+  tasks:
+    - debug:
+        msg:
+          - "Running on Local Parameter Server {{ inventory_hostname }}"
+          - "GLB_PS_ADDR: {{ hostvars[inventory_hostname].parent }}"
+          - "NUM_WORKERS: {{ groups['workers'] | length }}"
+          - "WORKER_ID: {{ hostvars[inventory_hostname].id }}"
+    - shell: >
+        cd $HOME/hcddl &&
+        . venv/bin/activate &&
+        nohup ./start_local_ps.sh > run.log 2>&1 &
+      environment:
+        GLB_PS_ADDR: "{{ hostvars[inventory_hostname].parent }}"
+        PYTHONUNBUFFERED: 1
+      register: result
+    - debug:
+        msg: "{{ result }}"
+
+- name: Start Worker Clients
+  hosts: workers
+  gather_facts: no
+
+  tasks:
+    - debug:
+        msg:
+          - "Running on Worker Client {{ inventory_hostname }}, parent={{ hostvars[inventory_hostname].parent }}"
+          - "LOC_PS_ADDR: {{ hostvars[inventory_hostname].parent }}"
+          - "NUM_WORKERS: {{ groups['workers'] | length }}"
+          - "WORKER_ID: {{ hostvars[inventory_hostname].id }}"
+    - shell: >
+        cd $HOME/hcddl &&
+        . venv/bin/activate &&
+        nohup ./start_worker.sh > run.log 2>&1 &
+      environment:
+        LOC_PS_ADDR: "{{ hostvars[inventory_hostname].parent }}"
+        NUM_WORKERS: "{{ groups['workers'] | length }}"
+        WORKER_ID: "{{ hostvars[inventory_hostname].id }}"
+        PYTHONUNBUFFERED: 1
+      register: result
+    - debug:
+        msg: "{{ result }}"

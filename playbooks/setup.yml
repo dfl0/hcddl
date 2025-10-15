@@ -1,0 +1,44 @@
+---
+- name: Set up project environment
+  hosts: pool
+
+  tasks:
+    - name: Ensure Python and venv exist
+      package:
+        name:
+          - python3
+          - python3-venv
+        state: present
+
+    - name: Create project directory
+      file:
+        path: $HOME/hcddl
+        state: directory
+        mode: "755"
+
+    - name: Create virtual environment
+      command: python3 -m venv $HOME/hcddl/venv
+      args:
+        creates: $HOME/hcddl/venv/bin/activate
+
+    - name: Copy requirements file to remote hosts
+      copy:
+        src: ../resources/requirements.txt
+        dest: $HOME/hcddl/venv/requirements.txt
+        mode: "644"
+
+    - name: Install Python packages
+      pip:
+        requirements: $HOME/hcddl/venv/requirements.txt
+        virtualenv: $HOME/hcddl/venv
+        virtualenv_python: python3
+
+    - name: Copy over start scripts
+      copy:
+        src: "{{ item }}"
+        dest: $HOME/hcddl/
+        mode: "755"
+      loop:
+        - "../resources/start_global_ps.sh"
+        - "../resources/start_local_ps.sh"
+        - "../resources/start_worker.sh"

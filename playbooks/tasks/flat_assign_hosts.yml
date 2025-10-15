@@ -1,0 +1,31 @@
+---
+# - name: Assign Hosts to Groups (Flat Architecture)
+#   hosts: localhost
+#   gather_facts: no
+#   vars_files:
+#     - "{{ lookup('env', 'PWD') }}/config.yml"
+
+- name: Initialize variables
+  set_fact:
+    # available_hosts: "{{ groups.pool | list }}"
+    host_index: 0
+    worker_id: 0
+
+- name: Assign Global Parameter Server
+  add_host:
+    name: "{{ available_hosts[host_index | int] }}"
+    groups: global_servers
+    aggr_type: "{{ parameter_server.aggr_type }}"
+  when: host_index | int < available_hosts | length
+
+- set_fact:
+    current_local_server: "{{ available_hosts[host_index | int] }}" # for compatibility with assign_worker.yml
+    host_index: "{{ host_index | int + 1 }}"
+
+- name: Assign Group of Workers
+  include_tasks: assign_worker.yml # including seperate task file is the only way have a loop with multiple tasks
+  loop: "{{ range(0, parameter_server.num_workers) | list }}"
+
+- name: Indicate hosts are done being assigned
+  set_fact:
+    hosts_assigned: true

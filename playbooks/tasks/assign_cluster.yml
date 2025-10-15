@@ -1,0 +1,16 @@
+---
+- name: Assign Local Parameter Server
+  add_host:
+    name: "{{ available_hosts[host_index | int] }}"
+    groups: local_servers
+    aggr_type: "{{ local_server.aggr_type }}"
+    parent: "{{ current_global_server }}"
+  when: host_index | int < available_hosts | length
+
+- set_fact:
+    current_local_server: "{{ available_hosts[host_index | int] }}"
+    host_index: "{{ host_index | int + 1 }}"
+
+- name: Assign Group of Workers
+  include_tasks: assign_worker.yml # including seperate task file is the only way have a loop with multiple tasks
+  loop: "{{ range(0, local_server.num_workers) | list }}"

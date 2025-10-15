@@ -1,0 +1,24 @@
+---
+- import_playbook: deploy.yml
+
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Wait a bit before sending out training
+      pause:
+        seconds: 1
+
+- import_playbook: start.yml
+
+- name: Wait for training to finish
+  hosts: global_servers
+  gather_facts: no
+  tasks:
+    - wait_for:
+        path: ~/hcddl/results.txt
+        timeout: 999999999
+
+- name: Stop the `flower` processes running
+  hosts: pool
+  tasks:
+    - shell: pgrep flower | xargs kill

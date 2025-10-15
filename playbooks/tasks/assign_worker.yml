@@ -1,0 +1,11 @@
+---
+- add_host:
+    name: "{{ available_hosts[host_index | int] }}"
+    groups: workers
+    parent: "{{ current_local_server }}"
+    id: "{{ worker_id }}"
+  when: host_index | int < available_hosts | length
+
+- set_fact:
+    host_index: "{{ host_index | int + 1 }}"
+    worker_id: "{{ worker_id | int + 1 }}"
