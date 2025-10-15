@@ -3,14 +3,16 @@ import time
 import timeit
 import pickle
 import concurrent
+import threading
 
 from logging import INFO, WARN
-from typing import Optional, Tuple
+from typing import Optional, Union
 
 from flwr.common import (
     Code,
     FitIns,
     FitRes,
+    EvaluateRes,
     Parameters,
     ndarrays_to_parameters,
     parameters_to_ndarrays,
@@ -23,6 +25,14 @@ from flwr.server.client_proxy import ClientProxy
 
 
 class AsyncLocalParameterServer(Server):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.active_futures = set()
+        self.future_lock = threading.Lock()
+
+        self.worker_comp_times = {}
+
     def fit(self, num_rounds: int, timeout: Optional[float]) -> tuple[History, float]:
         """Run federated averaging for a number of rounds."""
         history = History()
@@ -51,12 +61,41 @@ class AsyncLocalParameterServer(Server):
             for client, ins in client_instructions
         }
 
+        fut_results = []
+        fut_failures = []
+
+        with self.future_lock:
+            self.active_futures.update(futures)
+
         for future in futures:
             future.add_done_callback(
-                lambda future: _handle_finished_future_after_fit(future, server=self, executor=executor, history=history),
+                lambda future: _handle_finished_future_after_fit(
+                    future=future, results=fut_results, failures=fut_failures, server=self, executor=executor, history=history
+                ),
             )
 
         while not self.last_round:
+            with self.future_lock:
+                """
+                In case `fut_results` is updated again before aggregation is
+                  complete - waiting for aggregation to finish to release the
+                  lock could take longer, preventing workers from continuing
+                  as soon as possible)
+                """
+                curr_fut_results = fut_results.copy()
+                curr_fut_failures = fut_failures.copy()
+
+            # Aggregate Worker results/metrics
+            if curr_fut_results:
+                log(INFO, "")
+                log(INFO, f"Aggregating Worker results for parameters No. {self.current_round}...")
+                grads_aggregated, metrics_aggregated = self.strategy.aggregate_fit(self.current_round, curr_fut_results, curr_fut_failures)
+                history.add_metrics_distributed_fit(self.current_round, metrics=metrics_aggregated)
+
+            with self.future_lock:
+                fut_results = fut_results[len(curr_fut_results):]
+                fut_failures = fut_failures[len(curr_fut_failures):]
+
             self.current_round += 1
 
             log(INFO, "")
@@ -88,7 +127,15 @@ class AsyncLocalParameterServer(Server):
                     log(WARN, f"Received unknown signal: {signal}")
                     pass
 
-        executor.shutdown(wait=True, cancel_futures=True)
+        log(INFO, "[SHUTDOWN] Waiting for in-progress client updates to finish...")
+        while True:
+            with self.future_lock:
+                if not self.active_futures:
+                    break
+            time.sleep(1)
+        log(INFO, "[SHUTDOWN] All client updates complete.")
+
+        executor.shutdown(wait=True)
 
         # Bookkeeping
         end_time = timeit.default_timer()
@@ -138,34 +185,65 @@ def fit_client(
 
 def _handle_finished_future_after_fit(
     future: concurrent.futures.Future,
+    results: list[tuple[ClientProxy, EvaluateRes]],
+    failures: list[Union[tuple[ClientProxy, EvaluateRes], BaseException]],
     server: AsyncLocalParameterServer,
     executor: concurrent.futures.ThreadPoolExecutor,
     history: History,
 ) -> None:
+    with server.future_lock:
+        server.active_futures.discard(future)
+
+    failure = future.exception()
+    if failure is not None:
+        failures.append(failure)
+
     try:
-        client, res_fit = future.result()  # TODO: determine what timout should be used
+        result = future.result()  # TODO: determine what timout should be used
+        client, res_fit = result
 
         if res_fit is not None and res_fit.status.code == Code.OK:
             gradients = res_fit.parameters
+            worker_metrics = res_fit.metrics
+            history.add_metrics_distributed_fit(server.current_round, metrics=worker_metrics)
+
+            server.worker_comp_times[client.cid] = server.worker_comp_times.get(client.cid, 0) + worker_metrics["comp_time"]
+
+            comp_times_filepath = "comp_times.pkl"
+            with open(comp_times_filepath, "wb") as file:
+                pickle.dump(server.worker_comp_times, file)
+            log(INFO, f"Computation times saved: {comp_times_filepath}")
 
             if gradients:
-                server.update_count += 1
-                log(INFO, f"Update {server.update_count} from client {client.cid}")
+                with server.future_lock:
+                    server.update_count += 1
+                    update_count = server.update_count
 
-                grads_filepath = f"grads_{server.update_count}.pkl"
+                log(INFO, f"Update {update_count} from client {client.cid}")
+
+                grads_filepath = f"grads_{update_count}.pkl"
                 with open(grads_filepath, "wb") as file:
                     updated_parameters_ndarrays = parameters_to_ndarrays(gradients)
                     pickle.dump(updated_parameters_ndarrays, file)
                 log(INFO, f"Gradients saved: {grads_filepath}")
 
+                results.append(result)
+
         else:
             log(WARN, res_fit.status.message)
 
-        new_ins = FitIns(server.parameters, config=server.get_client_fit_config())
-        future = executor.submit(fit_client, client, new_ins, timeout=None)
-        future.add_done_callback(lambda future: _handle_finished_future_after_fit(future, server, executor, history))
+        if not server.last_round:
+            new_ins = FitIns(server.parameters, config=server.get_client_fit_config())
+            new_future = executor.submit(fit_client, client, new_ins, timeout=None)
+            with server.future_lock:
+                server.active_futures.add(new_future)
+            new_future.add_done_callback(
+                lambda future: _handle_finished_future_after_fit(future, results, failures, server, executor, history)
+            )
 
     except concurrent.futures.TimeoutError:
         log(WARN, "Client not done")
+
     except Exception as e:
+        # should only ever be any other exceptions, not one in the future as that is already handled
         log(WARN, e)

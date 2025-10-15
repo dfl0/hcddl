@@ -25,12 +25,10 @@ class LocalParameterServer(Server):
         log(INFO, f"Loading weights from file: {global_params_filepath}... ")
         with open(global_params_filepath, "rb") as file:
             parameters_ndarrays = pickle.load(file)
-        log(INFO, "Done")
         parameters = ndarrays_to_parameters(parameters_ndarrays)
 
         # log(INFO, "Removing params file... ")
         # os.remove(gbl_params_filepath)
-        # log(INFO, "Done")
 
         return parameters
 
@@ -93,7 +91,6 @@ class LocalParameterServer(Server):
             loc_sig_pipe = "loc_sig"
             with open(loc_sig_pipe, "w") as pipe:
                 pipe.write("LOC_GRAD_W")  # -> Edge Aggregator client
-            log(INFO, "Done")
 
             if res_fit is not None:
                 aggregated_gradients, fit_metrics, _ = res_fit
