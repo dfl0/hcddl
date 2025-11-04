@@ -66,7 +66,7 @@ The name of the inventory file is arbitrary, but it must include a `pool` group 
 Before doing anything, all the devices must be set up with the necessary Python version, dependencies, and files. The following command will take care of everything:
 
 ```console
-$ ansible-playbook -i <inventory-file> playbooks/setup.yml
+$ ansible-playbook -i <inventory-file> -u <remote-user> playbooks/setup.yml
 ```
 
 This will do a few things:
