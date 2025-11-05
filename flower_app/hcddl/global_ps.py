@@ -140,25 +140,25 @@ class GlobalParameterServer(Server):
                     else:
                         log(WARN, "No target accuracy provided")
 
-            if current_round % 10 == 0:
-                log(INFO, "Starting async evaluation")
-                threading.Thread(
-                    target=async_eval,
-                    args=(self.strategy, current_round, self.parameters, history),
-                    daemon=True  # won't block shutdown
-                ).start()
+            # if current_round % 10 == 0:
+            #     log(INFO, "Starting async evaluation")
+            #     threading.Thread(
+            #         target=async_eval,
+            #         args=(self.strategy, current_round, self.parameters, history),
+            #         daemon=True  # won't block shutdown
+            #     ).start()
 
-            # Evaluate model on a sample of available clients
-            res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
-            if res_fed is not None:
-                loss_fed, evaluate_metrics_fed, _ = res_fed
-                if loss_fed is not None:
-                    history.add_loss_distributed(
-                        server_round=current_round, loss=loss_fed
-                    )
-                    history.add_metrics_distributed(
-                        server_round=current_round, metrics=evaluate_metrics_fed
-                    )
+            # # Evaluate model on a sample of available clients
+            # res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
+            # if res_fed is not None:
+            #     loss_fed, evaluate_metrics_fed, _ = res_fed
+            #     if loss_fed is not None:
+            #         history.add_loss_distributed(
+            #             server_round=current_round, loss=loss_fed
+            #         )
+            #         history.add_metrics_distributed(
+            #             server_round=current_round, metrics=evaluate_metrics_fed
+            #         )
 
         # training done
         end_time = timeit.default_timer()
