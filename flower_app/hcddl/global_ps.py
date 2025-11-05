@@ -255,7 +255,8 @@ class GlobalParameterServer(Server):
         self.t_aggr.append((server_round, t_elapsed))
 
         parameters_aggregated, metrics_aggregated = aggregated_result
-        self.t_comp.append((server_round, metrics_aggregated['comp_time']))
+        if metrics_aggregated:
+            self.t_comp.append((server_round, metrics_aggregated['comp_time']))
 
         return parameters_aggregated, metrics_aggregated, (results, failures)
 
