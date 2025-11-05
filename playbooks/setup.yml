@@ -4,6 +4,8 @@
 
   tasks:
     - name: Ensure Python and venv exist
+      become: true
+      become_user: "{{ ansible_user_id }}"
       package:
         name:
           - python3
