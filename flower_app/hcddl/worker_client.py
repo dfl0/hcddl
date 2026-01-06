@@ -1,4 +1,5 @@
 import timeit
+import numpy as np
 import tensorflow as tf
 
 from logging import INFO
@@ -47,8 +48,6 @@ class WorkerClient(NumPyClient):
         log(INFO, "Beginning client fit step on next batch")
         log(INFO, f"Batch labels: {y_train}")
 
-        # TODO: fix having to change between gradients/parameters manually
-
         def train_step(x_batch, y_batch):
             with tf.GradientTape() as tape:
                 logits = self.model(x_batch, training=True)
@@ -62,19 +61,19 @@ class WorkerClient(NumPyClient):
             self.train_acc_metric.update_state(y_batch, logits)
             self.train_loss_metric.update_state(loss_value)
 
-            # return grads
+            return grads
 
         # keep track of time taken for computation in the fit step
         start_time = timeit.default_timer()
-        # gradients = train_step(x_train, y_train)
+        gradients = train_step(x_train, y_train)
         train_step(x_train, y_train)
         elapsed = timeit.default_timer() - start_time
         log(INFO, "Worker step time: %.4f", elapsed)
 
-        # client_gradients = [
-        #     grad.numpy() if grad is not None else np.zeros_like(w.numpy(), dtype=np.float32)
-        #     for grad, w in zip(gradients, self.model.trainable_weights)
-        # ]
+        client_gradients = [
+            grad.numpy() if grad is not None else np.zeros_like(w.numpy(), dtype=np.float32)
+            for grad, w in zip(gradients, self.model.trainable_weights)
+        ]
 
         num_samples = x_train.shape[0]
 
@@ -84,14 +83,12 @@ class WorkerClient(NumPyClient):
             "comp_time": elapsed,
         }
 
-        log(INFO, f"Client fit: Loss = {metrics['loss']:.4f}, Accuracy = {
-            metrics['acc']:.4f}, Samples = {num_samples}")
+        log(INFO, f"Client fit: Loss = {metrics['loss']:.4f}, Accuracy = {metrics['acc']:.4f}, Samples = {num_samples}")
 
         self.train_acc_metric.reset_state()
         self.train_loss_metric.reset_state()
 
-        # return client_gradients, num_samples, metrics
-        return self.model.get_weights(), num_samples, metrics
+        return client_gradients, num_samples, metrics
 
     # def evaluate(self, parameters, config):
     #     self.model.set_weights(parameters)

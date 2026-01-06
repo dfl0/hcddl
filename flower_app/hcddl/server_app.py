@@ -1,6 +1,9 @@
+import pickle
+import os
+
 from logging import INFO
 
-from flwr.common import ndarrays_to_parameters
+from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
 from flwr.common.logger import log
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
@@ -60,11 +63,20 @@ class LocalFedAvg(FedAvg):
         print("DONE")
         return client_ins
 
-    def aggregate_fit(self, *args, **kwargs):
-        print("AGGREGATING PARAMETERS")
-        parameters_aggregated, metrics_aggregated = super().aggregate_fit(*args, **kwargs)
+    def aggregate_fit(self, server_round, results, failures):
+        print("AGGREGATING GRADIENTS")
+        gradients_aggregated, metrics_aggregated = super().aggregate_fit(server_round, results, failures)
         print("DONE")
-        return parameters_aggregated, metrics_aggregated
+
+        print(os.listdir())
+
+        aggr_grads_filepath = "grads.pkl"
+        with open(aggr_grads_filepath, "wb") as file:
+            updated_grads_ndarrays = parameters_to_ndarrays(gradients_aggregated)
+            pickle.dump(updated_grads_ndarrays, file)
+        log(INFO, f"Aggregation complete, gradients saved: {aggr_grads_filepath}")
+
+        return gradients_aggregated, metrics_aggregated
 
 
 def get_on_fit_config_fn(num_rounds):
@@ -73,7 +85,6 @@ def get_on_fit_config_fn(num_rounds):
             "last_round": True if server_round >= num_rounds else False,
             "should_stop": True if server_round == -1 else False,
         }
-
         return config
 
     return fit_config
@@ -100,8 +111,7 @@ def fit_metrics_aggregation_fn(fit_metrics):
         total_examples += num_examples
         # accumulate weighted sum
         for key, val in client_metrics.items():
-            aggregated_metrics[key] = aggregated_metrics.get(
-                key, 0.0) + val * num_examples
+            aggregated_metrics[key] = aggregated_metrics.get(key, 0.0) + val * num_examples
 
     # compute weighted average
     for key in aggregated_metrics:

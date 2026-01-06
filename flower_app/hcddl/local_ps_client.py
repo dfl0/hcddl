@@ -55,7 +55,7 @@ class LocalParameterServerClient(NumPyClient):
         os.remove(loc_sig_pipe)
 
         updated_grads_filepath = "grads.pkl"
-        log(INFO, f"Loading weights from file: {updated_grads_filepath}...")
+        log(INFO, f"Loading gradients from file: {updated_grads_filepath}...")
         with open(updated_grads_filepath, "rb") as file:
             updated_grads_ndarrays = pickle.load(file)
 

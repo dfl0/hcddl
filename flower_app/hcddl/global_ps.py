@@ -67,21 +67,10 @@ class GlobalParameterServer(Server):
                 timeout=timeout,
             )
 
-            # TODO: fix having to change between gradients/parameters manually
-
             if res_fit is not None:
-                # aggregated_gradients, fit_metrics, _ = res_fit
-                # if aggregated_gradients:
-                #     self._apply_gradients(aggregated_gradients)
-
-                # history.add_metrics_distributed_fit(
-                #     server_round=current_round, metrics=fit_metrics
-                # )
-
-                aggregated_parameters, fit_metrics, _ = res_fit
-                if aggregated_parameters:
-                    self.parameters = aggregated_parameters
-                    self.model.set_weights(parameters_to_ndarrays(aggregated_parameters))
+                aggregated_gradients, fit_metrics, _ = res_fit
+                if aggregated_gradients:
+                    self._apply_gradients(aggregated_gradients)
 
                 history.add_metrics_distributed_fit(
                     server_round=current_round, metrics=fit_metrics
@@ -122,7 +111,6 @@ class GlobalParameterServer(Server):
                     if self.strategy.target_accuracy is not None:
                         if "accuracy" in metrics_cen:
                             log(INFO, "Global accuracy: %.4f (Target: %.4f)", metrics_cen["accuracy"], self.strategy.target_accuracy)
-
                             latest_accuracy_cen = metrics_cen["accuracy"]
                             max_accuracy = max(latest_accuracy_cen, max_accuracy)
 
@@ -147,18 +135,6 @@ class GlobalParameterServer(Server):
             #         args=(self.strategy, current_round, self.parameters, history),
             #         daemon=True  # won't block shutdown
             #     ).start()
-
-            # # Evaluate model on a sample of available clients
-            # res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
-            # if res_fed is not None:
-            #     loss_fed, evaluate_metrics_fed, _ = res_fed
-            #     if loss_fed is not None:
-            #         history.add_loss_distributed(
-            #             server_round=current_round, loss=loss_fed
-            #         )
-            #         history.add_metrics_distributed(
-            #             server_round=current_round, metrics=evaluate_metrics_fed
-            #         )
 
         # training done
         end_time = timeit.default_timer()
@@ -298,18 +274,18 @@ def save_results(
 ):
     datetime_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
-    with open("results.txt", "a") as f:
-        f.write(f"[ Results for run {datetime_str} ]\n")
-        f.write(f"Total time:\t{total_time}\n")
-        f.write(f"Total steps:\t{total_steps}\n")
-        f.write(f"Final loss:\t{final_loss}\n")
-        f.write(f"Final accuracy:\t{final_accuracy}\n")
-        f.write(f"Max accuracy:\t{max_accuracy}\n")
-        f.write(f"(total) t_conf:\t{sum(t for _, t in server.t_conf)}\n")
-        f.write(f"(total) t_round:\t{sum(t for _, t in server.t_round)}\n")
-        f.write(f"(total) t_fit:\t{sum(t for _, t in server.t_fit)}\n")
-        f.write(f"(total) t_aggr:\t{sum(t for _, t in server.t_aggr)}\n")
-        f.write(f"(total) t_comp:\t{sum(t for _, t in server.t_comp)}\n\n")
+    # with open("results.txt", "a") as f:
+    #     f.write(f"[ Results for run {datetime_str} ]\n")
+    #     f.write(f"Total time:\t{total_time}\n")
+    #     f.write(f"Total steps:\t{total_steps}\n")
+    #     f.write(f"Final loss:\t{final_loss}\n")
+    #     f.write(f"Final accuracy:\t{final_accuracy}\n")
+    #     f.write(f"Max accuracy:\t{max_accuracy}\n")
+    #     f.write(f"(total) t_conf:\t{sum(t for _, t in server.t_conf)}\n")
+    #     f.write(f"(total) t_round:\t{sum(t for _, t in server.t_round)}\n")
+    #     f.write(f"(total) t_fit:\t{sum(t for _, t in server.t_fit)}\n")
+    #     f.write(f"(total) t_aggr:\t{sum(t for _, t in server.t_aggr)}\n")
+    #     f.write(f"(total) t_comp:\t{sum(t for _, t in server.t_comp)}\n\n")
 
     print()
     print(f"[ Results for run {datetime_str} ]")
