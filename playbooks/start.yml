@@ -34,6 +34,8 @@
   gather_facts: no
   vars:
     local_dir: "{{ lookup('env', 'PWD') }}"
+  vars_files:
+    - "{{ local_dir }}/config.yml"
 
   tasks:
     - delegate_to: localhost
@@ -48,6 +50,7 @@
         arch="{{ arch }}"
         server-type="local"
         aggr-type="{{ hostvars[inventory_hostname].aggr_type }}"
+        batch-size={{ batch_size }}
         '
       register: result
       failed_when: "'Success' not in result.stdout"

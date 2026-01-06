@@ -25,6 +25,7 @@
     - debug:
         msg:
           - "Running on Global Parameter Server {{ inventory_hostname }}"
+          - "{{ hostvars[inventory_hostname] }}"
     - shell: >
         cd $HOME/hcddl &&
         . venv/bin/activate &&
@@ -44,8 +45,7 @@
         msg:
           - "Running on Local Parameter Server {{ inventory_hostname }}"
           - "GLB_PS_ADDR: {{ hostvars[inventory_hostname].parent }}"
-          - "NUM_WORKERS: {{ groups['workers'] | length }}"
-          - "WORKER_ID: {{ hostvars[inventory_hostname].id }}"
+          - "{{ hostvars[inventory_hostname] }}"
     - shell: >
         cd $HOME/hcddl &&
         . venv/bin/activate &&
@@ -68,6 +68,7 @@
           - "LOC_PS_ADDR: {{ hostvars[inventory_hostname].parent }}"
           - "NUM_WORKERS: {{ groups['workers'] | length }}"
           - "WORKER_ID: {{ hostvars[inventory_hostname].id }}"
+          - "{{ hostvars[inventory_hostname] }}"
     - shell: >
         cd $HOME/hcddl &&
         . venv/bin/activate &&
